@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VORA MT5 AI Trader</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com/3.4.17"></script>
+<script>
+tailwind.config = { theme: { extend: {
+  colors: { ink:'#0f1722', panel:'#151f2d', raised:'#1b283a', line:'#28384e', tx:'#dbe3ee', mute:'#8091a8',
+            brass:'#d4a84f', up:'#35b38a', down:'#e0635b', warn:'#e3a23b', info:'#5aa0e6' },
+  fontFamily: { sans:['"IBM Plex Sans"','system-ui','sans-serif'], mono:['"IBM Plex Mono"','ui-monospace','monospace'] } } } }
+</script>
+<script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
+<style>
+  html,body{background:#0f1722;color:#dbe3ee}
+  .num{font-family:"IBM Plex Mono",monospace;font-variant-numeric:tabular-nums}
+  .card{background:#151f2d;border:1px solid #28384e;border-radius:6px}
+  .card h2{font-size:.8rem;font-weight:600;color:#8091a8;padding:.6rem .8rem;border-bottom:1px solid #28384e}
+  .btn{border:1px solid #28384e;background:#1b283a;border-radius:5px;padding:.45rem .8rem;font-size:.85rem;font-weight:500;transition:background .15s,border-color .15s}
+  .btn:hover:not(:disabled){border-color:#d4a84f}
+  .btn:disabled{opacity:.35;cursor:not-allowed}
+  .btn:focus-visible,.tab:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid #d4a84f;outline-offset:2px}
+  .btn-go{background:#d4a84f;color:#0f1722;border-color:#d4a84f}
+  .btn-go:hover:not(:disabled){background:#e2b95f}
+  .chip{display:inline-flex;align-items:center;gap:.4rem;border:1px solid #28384e;border-radius:999px;padding:.15rem .6rem;font-size:.75rem;background:#151f2d;white-space:nowrap}
+  .dot{width:.5rem;height:.5rem;border-radius:50%;background:#8091a8}
+  .dot.ok{background:#35b38a}.dot.bad{background:#e0635b}.dot.wait{background:#e3a23b}
+  .tab{padding:.5rem .9rem;font-size:.85rem;color:#8091a8;border-bottom:2px solid transparent}
+  .tab[aria-selected=true]{color:#dbe3ee;border-color:#d4a84f}
+  table{width:100%;font-size:.78rem;border-collapse:collapse}
+  th{color:#8091a8;font-weight:500;text-align:left;padding:.4rem .6rem;border-bottom:1px solid #28384e;white-space:nowrap}
+  td{padding:.4rem .6rem;border-bottom:1px solid #1f2d41;vertical-align:top}
+  .scroll-x{overflow-x:auto}
+  input[type=text],input[type=number],input[type=date],select{background:#0f1722;border:1px solid #28384e;border-radius:4px;padding:.3rem .5rem;width:100%;font-size:.85rem}
+  dialog{background:#151f2d;color:#dbe3ee;border:1px solid #d4a84f;border-radius:8px;padding:1.25rem;max-width:28rem;width:92%}
+  dialog::backdrop{background:rgba(5,9,15,.7)}
+  .estop{background:#b3261e;border:2px solid #ff6b60;color:#fff;font-weight:700;letter-spacing:.02em;border-radius:6px;padding:.55rem 1.1rem;font-size:.95rem}
+  .estop:hover{background:#d0362c}
+  .estop:focus-visible{outline:3px solid #fff;outline-offset:2px}
+  .bar{height:.5rem;background:#0f1722;border-radius:4px;overflow:hidden}
+  .bar>div{height:100%;background:#35b38a;transition:width .4s}
+  .bar.warn>div{background:#e3a23b}.bar.bad>div{background:#e0635b}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body class="font-sans antialiased min-h-screen">
+
+<header class="border-b border-line bg-panel sticky top-0 z-20">
+  <div class="max-w-[1500px] mx-auto px-3 py-2 flex flex-wrap items-center gap-x-4 gap-y-2">
+    <div class="mr-2">
+      <div class="text-base font-semibold tracking-wide">VORA MT5 AI Trader</div>
+      <div class="text-xs text-mute" id="hdr-symbol">Volatility 50 · M5</div>
+    </div>
+    <div class="flex flex-wrap gap-2 items-center flex-1" id="status-chips" aria-live="polite"></div>
+    <div class="num text-xs text-mute" id="clock" aria-label="Current time"></div>
+    <button class="estop" id="btn-estop" title="Block all new orders immediately">EMERGENCY STOP</button>
+  </div>
+</header>
+
+<main class="max-w-[1500px] mx-auto p-3 grid gap-3 lg:grid-cols-[minmax(0,1fr)_340px]">
+
+  <!-- Right rail first on mobile -->
+  <aside class="grid gap-3 content-start lg:order-2">
+    <section class="card" aria-labelledby="h-controls">
+      <h2 id="h-controls">Bot controls</h2>
+      <div class="p-3 grid gap-3">
+        <div id="state-banner" class="rounded px-3 py-2 text-sm font-medium bg-raised border border-line">Loading…</div>
+        <div class="grid grid-cols-2 gap-2">
+          <button class="btn btn-go" id="btn-start">Start bot</button>
+          <button class="btn" id="btn-stop">Stop bot</button>
+          <button class="btn" id="btn-pause">Pause bot</button>
+          <button class="btn" id="btn-resume">Resume bot</button>
+        </div>
+        <label class="flex items-center justify-between gap-3 text-sm border border-line rounded px-3 py-2 bg-raised cursor-pointer">
+          <span>Auto trading<span class="block text-xs text-mute" id="auto-note">Off: signals are analysed but no orders are sent</span></span>
+          <input type="checkbox" id="auto-toggle" class="h-5 w-5 accent-[#d4a84f]">
+        </label>
+        <div id="permit-note" class="text-xs text-mute"></div>
+      </div>
+    </section>
+
+    <section class="card" aria-labelledby="h-acc">
+      <h2 id="h-acc">Account</h2>
+      <dl class="p-3 grid grid-cols-2 gap-x-3 gap-y-2 text-sm" id="account"></dl>
+      <div class="px-3 pb-3">
+        <div class="flex justify-between text-xs text-mute mb-1"><span>Daily loss limit remaining</span><span class="num" id="limit-txt"></span></div>
+        <div class="bar" id="limit-bar"><div style="width:100%"></div></div>
+      </div>
+    </section>
+
+    <section class="card" aria-labelledby="h-ai">
+      <h2 id="h-ai">Groq analysis</h2>
+      <div class="p-3 text-sm grid gap-2" id="ai-panel"><div class="text-mute">No setup has been sent to Groq yet.</div></div>
+    </section>
+  </aside>
+
+  <div class="grid gap-3 content-start lg:order-1 min-w-0">
+    <section class="card" aria-label="Market overview">
+      <div class="p-3 grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-8 gap-3 text-sm" id="market"></div>
+    </section>
+
+    <section class="card" aria-labelledby="h-chart">
+      <div class="flex items-center justify-between border-b border-line">
+        <h2 id="h-chart" class="border-0">Live chart</h2>
+        <div class="pr-3 flex items-center gap-2 text-xs text-mute">
+          <label for="chart-tf">Chart timeframe</label>
+          <select id="chart-tf" class="!w-auto"><option>M1</option><option selected>M5</option><option>M15</option><option>M30</option><option>H1</option></select>
+        </div>
+      </div>
+      <div id="chart" class="w-full h-[380px]"></div>
+      <div class="px-3 py-2 text-xs text-mute flex flex-wrap gap-x-4">
+        <span><span style="color:#5aa0e6">━</span> EMA 9</span><span><span style="color:#d4a84f">━</span> EMA 21</span><span><span style="color:#b48ef0">━</span> EMA 50</span>
+        <span>▲ buy signal · ▼ sell signal (filled = order placed)</span>
+      </div>
+    </section>
+
+    <section class="card min-w-0" aria-label="Details">
+      <div role="tablist" class="flex flex-wrap border-b border-line" id="tabs">
+        <button role="tab" class="tab" data-tab="positions" aria-selected="true">Open positions</button>
+        <button role="tab" class="tab" data-tab="trades" aria-selected="false">Trade history</button>
+        <button role="tab" class="tab" data-tab="signals" aria-selected="false">Signal history</button>
+        <button role="tab" class="tab" data-tab="events" aria-selected="false">Event log</button>
+        <button role="tab" class="tab" data-tab="backtest" aria-selected="false">Backtest</button>
+        <button role="tab" class="tab" data-tab="settings" aria-selected="false">Settings</button>
+      </div>
+      <div id="tab-body" class="scroll-x min-h-[160px]"></div>
+    </section>
+  </div>
+</main>
+
+<dialog id="confirm"><form method="dialog">
+  <h3 class="font-semibold mb-2" id="confirm-title">Confirm</h3>
+  <div class="text-sm text-mute mb-4" id="confirm-body"></div>
+  <div class="flex justify-end gap-2"><button class="btn" value="cancel">Cancel</button><button class="btn btn-go" value="ok" id="confirm-ok">Confirm</button></div>
+</form></dialog>
+
+<div id="toast" class="fixed bottom-4 left-1/2 -translate-x-1/2 bg-raised border border-line rounded px-4 py-2 text-sm hidden z-30" role="status"></div>
+<script src="/static/app.js"></script>
+</body>
+</html>
